@@ -1,221 +1,183 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './style.css';
 import config from './config.js';
 
 function MarketManager() {
+  // State
   const [items, setItems] = useState([]);
-  const [item, setItem] = useState({
-    id: '',
-    name: '',
-    category: '',
-    price: '',
-    quantity: '',
-    unit: ''
-  });
-  const [idToFetch, setIdToFetch] = useState('');
-  const [fetchedItem, setFetchedItem] = useState(null);
+  const [selected, setSelected] = useState(null); // item selected for view/edit
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEdit, setIsEdit] = useState(false);
   const [message, setMessage] = useState('');
-  const [editMode, setEditMode] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const baseUrl = `${config.url}/marketapi`;
 
-  useEffect(() => {
-    fetchAllItems();
-  }, []);
-
-  const fetchAllItems = async () => {
+  // API helpers
+  const fetchAllItems = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await axios.get(`${baseUrl}/all`);
-      setItems(res.data);
-      setInitialLoad(false);
+      setItems(res.data || []);
     } catch (error) {
-      // Only show error if it's not the initial load or if there are no items
-      if (!initialLoad || items.length === 0) {
-        setMessage('Failed to fetch items.');
-      }
-      setInitialLoad(false);
+      console.error(error);
+      setMessage('Unable to load items.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [baseUrl]);
 
-  const handleChange = (e) => {
-    setItem({ ...item, [e.target.name]: e.target.value });
-  };
+  useEffect(() => {
+    fetchAllItems();
+  }, [fetchAllItems]);
 
-  const validateForm = () => {
-    for (let key in item) {
-      if (!item[key] || item[key].toString().trim() === '') {
-        setMessage(`Please fill out the ${key} field.`);
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const addItem = async () => {
-    if (!validateForm()) return;
+  const addItem = async (itm) => {
     try {
-      await axios.post(`${baseUrl}/add`, item);
-      setMessage('Item added successfully.');
+      await axios.post(`${baseUrl}/add`, itm);
+      setMessage('Item added.');
       fetchAllItems();
-      resetForm();
+      closeModal();
     } catch (error) {
-      setMessage('Error adding item.');
+      console.error(error);
+      setMessage('Failed to add item.');
     }
   };
 
-  const updateItem = async () => {
-    if (!validateForm()) return;
+  const updateItem = async (itm) => {
     try {
-      await axios.put(`${baseUrl}/update`, item);
-      setMessage('Item updated successfully.');
+      await axios.put(`${baseUrl}/update`, itm);
+      setMessage('Item updated.');
       fetchAllItems();
-      resetForm();
+      closeModal();
     } catch (error) {
-      setMessage('Error updating item.');
+      console.error(error);
+      setMessage('Failed to update item.');
     }
   };
 
   const deleteItem = async (id) => {
+    if (!confirm(`Delete item with ID ${id}?`)) return;
     try {
-      const res = await axios.delete(`${baseUrl}/delete/${id}`);
-      setMessage(res.data);
+      await axios.delete(`${baseUrl}/delete/${id}`);
+      setMessage('Item deleted.');
       fetchAllItems();
     } catch (error) {
-      setMessage('Error deleting item.');
+      console.error(error);
+      setMessage('Failed to delete item.');
     }
   };
 
-  const getItemById = async () => {
-    try {
-      const res = await axios.get(`${baseUrl}/get/${idToFetch}`);
-      setFetchedItem(res.data);
-      setMessage('');
-    } catch (error) {
-      setFetchedItem(null);
-      setMessage('Item not found.');
+  // Modal controls
+  const openCreate = () => {
+    setSelected({ id: '', name: '', category: '', price: '', quantity: '', unit: '' });
+    setIsEdit(false);
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (itm) => {
+    setSelected({ ...itm });
+    setIsEdit(true);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setSelected(null);
+    setIsModalOpen(false);
+    setIsEdit(false);
+  };
+
+  // Form submit
+  const submitForm = (e) => {
+    e.preventDefault();
+    if (!selected) return;
+    // basic validation
+    const keys = ['id', 'name', 'category', 'price', 'quantity', 'unit'];
+    for (let k of keys) {
+      if (selected[k] === undefined || selected[k] === null || selected[k].toString().trim() === '') {
+        setMessage(`Please fill ${k}`);
+        return;
+      }
     }
-  };
 
-  const handleEdit = (itm) => {
-    setItem(itm);
-    setEditMode(true);
-    setMessage(`Editing item with ID ${itm.id}`);
-  };
-
-  const resetForm = () => {
-    setItem({
-      id: '',
-      name: '',
-      category: '',
-      price: '',
-      quantity: '',
-      unit: ''
-    });
-    setEditMode(false);
+    if (isEdit) updateItem(selected);
+    else addItem(selected);
   };
 
   return (
-    <div className="market-container">
+    <div className="market-app">
+      <header className="app-header">
+        <h1>Market Manager</h1>
+        <div className="header-actions">
+          <button className="btn primary" onClick={openCreate}>New Item</button>
+          <button className="btn" onClick={fetchAllItems}>Refresh</button>
+        </div>
+      </header>
 
-      {message && (
-        <div className={`message-banner ${message.toLowerCase().includes('error') ? 'error' : 'success'}`}>
-          {message}
+      {message && <div className="toast">{message}</div>}
+
+      <main>
+        <section className="grid">
+          {loading ? (
+            <div className="empty">Loading...</div>
+          ) : items.length === 0 ? (
+            <div className="empty">No items yet — click New Item to add one.</div>
+          ) : (
+            items.map(itm => (
+              <article className="card" key={itm.id}>
+                <div className="card-header">
+                  <h4>{itm.name}</h4>
+                  <div className="chip">{itm.category}</div>
+                </div>
+                <div className="card-body">
+                  <div><strong>Price:</strong> {itm.price}</div>
+                  <div><strong>Qty:</strong> {itm.quantity} {itm.unit}</div>
+                  <div className="muted">ID: {itm.id}</div>
+                </div>
+                <div className="card-footer">
+                  <button className="btn" onClick={() => openEdit(itm)}>Edit</button>
+                  <button className="btn danger" onClick={() => deleteItem(itm.id)}>Delete</button>
+                </div>
+              </article>
+            ))
+          )}
+        </section>
+      </main>
+
+      {isModalOpen && (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{isEdit ? 'Edit Item' : 'Create Item'}</h3>
+            <form onSubmit={submitForm} className="modal-form">
+              <label>ID<input type="number" name="id" value={selected.id} onChange={(e) => setSelected({ ...selected, id: e.target.value })} /></label>
+              <label>Name<input type="text" name="name" value={selected.name} onChange={(e) => setSelected({ ...selected, name: e.target.value })} /></label>
+              <label>Category
+                <select value={selected.category} onChange={(e) => setSelected({ ...selected, category: e.target.value })}>
+                  <option value="">Select</option>
+                  <option value="Vegetable">Vegetable</option>
+                  <option value="Fruit">Fruit</option>
+                  <option value="Grain">Grain</option>
+                </select>
+              </label>
+              <label>Price<input type="number" name="price" value={selected.price} onChange={(e) => setSelected({ ...selected, price: e.target.value })} /></label>
+              <label>Quantity<input type="number" name="quantity" value={selected.quantity} onChange={(e) => setSelected({ ...selected, quantity: e.target.value })} /></label>
+              <label>Unit
+                <select value={selected.unit} onChange={(e) => setSelected({ ...selected, unit: e.target.value })}>
+                  <option value="">Select</option>
+                  <option value="Kg">Kg</option>
+                  <option value="Gram">Gram</option>
+                  <option value="Dozen">Dozen</option>
+                </select>
+              </label>
+
+              <div className="modal-actions">
+                <button className="btn primary" type="submit">{isEdit ? 'Update' : 'Create'}</button>
+                <button type="button" className="btn" onClick={closeModal}>Cancel</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
-
-      <h2>Market Management</h2>
-
-      <div>
-        <h3>{editMode ? 'Edit Item' : 'Add Item'}</h3>
-        <div className="form-grid">
-          <input type="number" name="id" placeholder="ID" value={item.id} onChange={handleChange} />
-          <input type="text" name="name" placeholder="Item Name (e.g. Tomato)" value={item.name} onChange={handleChange} />
-
-          <select name="category" value={item.category} onChange={handleChange}>
-            <option value="">Select Category</option>
-            <option value="Vegetable">Vegetable</option>
-            <option value="Fruit">Fruit</option>
-            <option value="Grain">Grain</option>
-          </select>
-
-          <input type="number" name="price" placeholder="Price" value={item.price} onChange={handleChange} />
-          <input type="number" name="quantity" placeholder="Quantity" value={item.quantity} onChange={handleChange} />
-
-          <select name="unit" value={item.unit} onChange={handleChange}>
-            <option value="">Select Unit</option>
-            <option value="Kg">Kg</option>
-            <option value="Gram">Gram</option>
-            <option value="Dozen">Dozen</option>
-          </select>
-        </div>
-
-        <div className="btn-group">
-          {!editMode ? (
-            <button className="btn-blue" onClick={addItem}>Add Item</button>
-          ) : (
-            <>
-              <button className="btn-green" onClick={updateItem}>Update Item</button>
-              <button className="btn-gray" onClick={resetForm}>Cancel</button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <h3>Get Item By ID</h3>
-        <input
-          type="number"
-          value={idToFetch}
-          onChange={(e) => setIdToFetch(e.target.value)}
-          placeholder="Enter ID"
-        />
-        <button className="btn-blue" onClick={getItemById}>Fetch</button>
-
-        {fetchedItem && (
-          <div>
-            <h4>Item Found:</h4>
-            <pre>{JSON.stringify(fetchedItem, null, 2)}</pre>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <h3>All Items</h3>
-        {items.length === 0 ? (
-          <p>No items found.</p>
-        ) : (
-          <div className="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  {Object.keys(item).map((key) => (
-                    <th key={key}>{key}</th>
-                  ))}
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((itm) => (
-                  <tr key={itm.id}>
-                    {Object.keys(item).map((key) => (
-                      <td key={key}>{itm[key]}</td>
-                    ))}
-                    <td>
-                      <div className="action-buttons">
-                        <button className="btn-green" onClick={() => handleEdit(itm)}>Edit</button>
-                        <button className="btn-red" onClick={() => deleteItem(itm.id)}>Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
     </div>
   );
 }
