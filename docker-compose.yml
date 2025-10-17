@@ -13,7 +13,7 @@ services:
       - springboot-mysql-net
 
   backend:
-    image: 2300030156/market-backend:latest
+    image: 2300030156/market-springboot:latest
     container_name: market-springboot
     ports:
       - "2025:2000"
@@ -24,8 +24,8 @@ services:
       - springboot-mysql-net
 
   frontend:
-    image: 2300030156/market-frontend:latest
-    container_name: react
+    image: 2300030156/market-react:latest
+    container_name: market-react
     ports:
       - "3000:80"
     depends_on:
