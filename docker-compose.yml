@@ -1,7 +1,7 @@
 services:
   mysqldb:
     image: mysql:8
-    container_name: mysql-db
+    container_name: mysqldb
     environment:
       MYSQL_ROOT_PASSWORD: docker
       MYSQL_DATABASE: marketdb
