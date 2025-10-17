@@ -1,0 +1,56 @@
+services:
+  mysqldb:
+    container_name: mysql-db
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: docker
+      MYSQL_DATABASE: marketdb
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - springboot-react-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pdocker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    container_name: market-springboot
+    build:
+      context: ./market-springboot
+      dockerfile: ../market-springboot/Dockerfile
+    image: market-backend:latest
+    ports:
+      - "2001:2000"
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - springboot-react-network
+
+  frontend:
+    container_name: market-react
+    build:
+      context: ./market-react
+      dockerfile: ../market-react/Dockerfile
+    image: market-frontend:latest
+    ports:
+      - "3001:5173"
+    depends_on:
+      - backend
+    networks:
+      - springboot-react-network
+
+# Declare volumes for persistence
+volumes:
+  mysql-data:
+
+# Define custom bridge network
+networks:
+  springboot-react-network:
+    driver: bridge
